@@ -2,7 +2,7 @@
 
 
 def test_full_workflow(client):
-    resp = client.get('/api/health')
+    resp = client.get('/api/ping')
     assert resp.status_code == 200
 
     resp = client.get('/api/stats')

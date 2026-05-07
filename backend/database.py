@@ -96,6 +96,9 @@ def init_db():
             content TEXT
         );
     """)
+    # Performance indexes
+    db.execute("CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_activities_start ON activities(start_time)")
     # Migration: add columns that may not exist on older databases
     _migrate(db, "chat_history", "session_id", "TEXT NOT NULL DEFAULT ''")
     for col, col_def in [

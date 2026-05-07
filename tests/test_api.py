@@ -3,7 +3,7 @@ from backend.database import get_db
 
 
 def test_app_health_check(client):
-    resp = client.get('/api/health')
+    resp = client.get('/api/ping')
     assert resp.status_code == 200
     assert resp.json['status'] == 'ok'
 

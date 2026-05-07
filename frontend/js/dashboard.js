@@ -23,7 +23,7 @@ registerPage('#dashboard', async (container) => {
         <div id="summary-line" class="summary-line"></div>
         <div id="stats-cards" class="stats-grid"></div>
 
-        <div class="card" id="vdot-card" style="margin-top:16px">
+        <div class="card" id="vdot-card">
             <div class="flex-between">
                 <h2>跑力 (VDOT)</h2>
                 <button class="collapse-toggle" id="vdot-toggle" onclick="toggleVDOT()">
@@ -31,16 +31,25 @@ registerPage('#dashboard', async (container) => {
                 </button>
             </div>
             <div id="vdot-summary" class="stats-grid"></div>
-            <div id="vdot-detail" style="display:none;margin-top:14px"></div>
+            <div id="vdot-detail" style="display:none;margin-top:10px"></div>
         </div>
 
-        <div class="card" style="margin-top:16px">
+        <div class="card">
             <h2>健康数据</h2>
             <div id="health-cards" class="stats-grid"></div>
-            <div class="chart-wrap" style="height:200px;margin-top:12px"><canvas id="healthChart"></canvas></div>
+            <div class="charts-row" style="margin-top:10px">
+                <div class="chart-col">
+                    <h3>HRV · 睡眠</h3>
+                    <div class="chart-wrap" style="height:170px"><canvas id="healthChart"></canvas></div>
+                </div>
+                <div class="chart-col">
+                    <h3>静息心率 · 身体电量</h3>
+                    <div class="chart-wrap" style="height:170px"><canvas id="healthChart2"></canvas></div>
+                </div>
+            </div>
         </div>
 
-        <div class="card" style="margin-top:16px">
+        <div class="card">
             <div class="charts-row">
                 <div class="chart-col">
                     <h3>月度跑量趋势</h3>
@@ -176,21 +185,21 @@ function renderVDOTDetail(vd) {
 
     let hrHtml = '';
     if (Object.keys(vd.hr_zones).length > 0) {
-        hrHtml = `<h3 style="margin-top:18px">心率区间 (储备心率法)</h3>
-            <table style="margin-top:6px"><thead><tr><th>区间</th><th>心率 (bpm)</th></tr></thead><tbody>` +
+        hrHtml = `<h3 style="margin-top:14px">心率区间 (储备心率法)</h3>
+            <table style="margin-top:4px"><thead><tr><th>区间</th><th>心率 (bpm)</th></tr></thead><tbody>` +
             Object.entries(vd.hr_zones).map(([name, rng]) => `<tr><td>${name}</td><td>${rng}</td></tr>`).join('') +
             '</tbody></table>';
     }
 
     el.innerHTML = `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
             <div>
-                <h3>成绩预测</h3>
-                <table style="margin-top:6px"><thead><tr><th>距离</th><th>预测成绩</th></tr></thead><tbody>${predRows}</tbody></table>
+                <h3 style="margin-top:0">成绩预测</h3>
+                <table style="margin-top:4px"><thead><tr><th>距离</th><th>预测成绩</th></tr></thead><tbody>${predRows}</tbody></table>
             </div>
             <div>
-                <h3>训练配速区间</h3>
-                <table style="margin-top:6px"><thead><tr><th>类型</th><th>配速</th></tr></thead><tbody>${paceRows}</tbody></table>
+                <h3 style="margin-top:0">训练配速区间</h3>
+                <table style="margin-top:4px"><thead><tr><th>类型</th><th>配速</th></tr></thead><tbody>${paceRows}</tbody></table>
             </div>
         </div>
         ${hrHtml}
@@ -258,6 +267,7 @@ async function loadHealth() {
         const data = await API.healthData(14);
         renderHealthCards(data);
         renderHealthChart(data);
+        renderHealthChart2(data);
     } catch (err) {
         document.getElementById('health-cards').innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1">暂无健康数据，请在设置页同步</p>';
     }
@@ -270,8 +280,20 @@ function renderHealthCards(data) {
         el.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1">暂无健康数据，请在设置页执行「同步健康数据」</p>';
         return;
     }
-    const latest = data[data.length - 1];
-    const prev = data.length > 1 ? data[data.length - 2] : null;
+    // Find latest day with actual data (skip empty days)
+    let latest = null;
+    let prev = null;
+    for (let i = data.length - 1; i >= 0; i--) {
+        const d = data[i];
+        if (d.hrv_avg || d.sleep_score || d.resting_hr || d.avg_stress || d.body_battery_max) {
+            if (!latest) { latest = d; }
+            else if (!prev) { prev = d; break; }
+        }
+    }
+    if (!latest) {
+        el.innerHTML = '<p style="color:var(--text-muted);grid-column:1/-1">健康数据同步中，请稍后查看</p>';
+        return;
+    }
 
     function trend(curr, prev_val, unit) {
         if (!prev_val || !curr) return '';
@@ -346,7 +368,54 @@ function renderHealthChart(data) {
             responsive: true,
             maintainAspectRatio: false,
             interaction: { intersect: false, mode: 'index' },
-            plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } } },
+            plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20, boxWidth: 10 } } },
+            scales: {
+                y: { type: 'linear', position: 'left', grid: { color: '#f0f0f0' } },
+                y1: { type: 'linear', position: 'right', min: 0, max: 100, grid: { display: false } }
+            }
+        }
+    });
+}
+
+function renderHealthChart2(data) {
+    const canvas = document.getElementById('healthChart2');
+    if (!canvas || !data.length) return;
+    if (_charts.health2) _charts.health2.destroy();
+
+    const labels = data.map(d => (d.date||'').slice(5));
+    const rhrs = data.map(d => d.resting_hr || null);
+    const bbs = data.map(d => d.body_battery_max || null);
+
+    _charts.health2 = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: '静息心率 (bpm)',
+                    data: rhrs,
+                    borderColor: '#2ecc71',
+                    backgroundColor: 'transparent',
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y',
+                },
+                {
+                    label: '身体电量',
+                    data: bbs,
+                    borderColor: '#f39c12',
+                    backgroundColor: 'transparent',
+                    tension: 0.3,
+                    pointRadius: 3,
+                    yAxisID: 'y1',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20, boxWidth: 10 } } },
             scales: {
                 y: { type: 'linear', position: 'left', grid: { color: '#f0f0f0' } },
                 y1: { type: 'linear', position: 'right', min: 0, max: 100, grid: { display: false } }

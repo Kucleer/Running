@@ -74,35 +74,50 @@ async function viewActivityDetail(id) {
         const detail = document.getElementById('act-detail');
         detail.style.display = 'block';
 
-        let dynamicsHtml = '';
-        if (act.avg_cadence || act.avg_ground_contact_time || act.avg_vertical_oscillation) {
-            const items = [];
-            if (act.avg_cadence) items.push(`<div class="stat-card"><div class="value">${Math.round(act.avg_cadence)}</div><div class="label">步频 (spm)</div></div>`);
-            if (act.max_cadence) items.push(`<div class="stat-card"><div class="value">${Math.round(act.max_cadence)}</div><div class="label">最高步频</div></div>`);
-            if (act.avg_ground_contact_time) items.push(`<div class="stat-card"><div class="value">${Math.round(act.avg_ground_contact_time)}</div><div class="label">触地时间 (ms)</div></div>`);
-            if (act.avg_vertical_oscillation) items.push(`<div class="stat-card"><div class="value">${(act.avg_vertical_oscillation/10).toFixed(1)}</div><div class="label">垂直振幅 (cm)</div></div>`);
-            if (act.avg_stride_length) items.push(`<div class="stat-card"><div class="value">${(act.avg_stride_length/100).toFixed(2)}</div><div class="label">步幅 (m)</div></div>`);
-            if (act.training_effect) items.push(`<div class="stat-card"><div class="value">${act.training_effect.toFixed(1)}</div><div class="label">训练效果</div></div>`);
-            if (act.vo2max) items.push(`<div class="stat-card"><div class="value">${Math.round(act.vo2max)}</div><div class="label">VO2max</div></div>`);
-            if (act.lactate_threshold) items.push(`<div class="stat-card"><div class="value">${Math.round(act.lactate_threshold)}</div><div class="label">乳酸阈值 (bpm)</div></div>`);
-            dynamicsHtml = `<div class="stats-grid" style="margin-top:12px">${items.join('')}</div>`;
-        }
+        const compactCard = 'padding:10px 12px';
+        const compactValue = 'font-size:20px';
+        const compactLabel = 'font-size:11px';
+        const u = 'style="font-size:10px;color:#999"';
+
+        // Basic metrics
+        const basicItems = [];
+        basicItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${(act.distance/1000).toFixed(2)}<span ${u}> km</span></div><div class="label" style="${compactLabel}">距离</div></div>`);
+        basicItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${formatDuration(act.duration)}</div><div class="label" style="${compactLabel}">时长</div></div>`);
+        basicItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${formatPace(act.avg_pace)}<span ${u}> /km</span></div><div class="label" style="${compactLabel}">平均配速</div></div>`);
+        basicItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${Math.round(act.avg_heart_rate) || '-'}<span ${u}> bpm</span></div><div class="label" style="${compactLabel}">平均心率</div></div>`);
+        basicItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${Math.round(act.max_heart_rate) || '-'}<span ${u}> bpm</span></div><div class="label" style="${compactLabel}">最大心率</div></div>`);
+        basicItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${act.elevation_gain || 0}<span ${u}> m</span></div><div class="label" style="${compactLabel}">海拔爬升</div></div>`);
+
+        // Running dynamics
+        const dynItems = [];
+        if (act.avg_cadence) dynItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${Math.round(act.avg_cadence)}<span ${u}> spm</span></div><div class="label" style="${compactLabel}">平均步频</div></div>`);
+        if (act.max_cadence) dynItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${Math.round(act.max_cadence)}<span ${u}> spm</span></div><div class="label" style="${compactLabel}">最高步频</div></div>`);
+        if (act.avg_ground_contact_time) dynItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${Math.round(act.avg_ground_contact_time)}<span ${u}> ms</span></div><div class="label" style="${compactLabel}">触地时间</div></div>`);
+        if (act.avg_vertical_oscillation) dynItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${(act.avg_vertical_oscillation).toFixed(1)}<span ${u}> cm</span></div><div class="label" style="${compactLabel}">垂直振幅</div></div>`);
+        if (act.avg_stride_length) dynItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${(act.avg_stride_length/100).toFixed(2)}<span ${u}> m</span></div><div class="label" style="${compactLabel}">步幅</div></div>`);
+        if (act.training_effect) dynItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${act.training_effect.toFixed(1)}</div><div class="label" style="${compactLabel}">训练效果</div></div>`);
+        if (act.vo2max) dynItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${Math.round(act.vo2max)}</div><div class="label" style="${compactLabel}">VO2max</div></div>`);
+        if (act.lactate_threshold) dynItems.push(`<div class="stat-card" style="${compactCard}"><div class="value" style="${compactValue}">${Math.round(act.lactate_threshold)}<span ${u}> bpm</span></div><div class="label" style="${compactLabel}">乳酸阈值</div></div>`);
+
+        const dynamicsHtml = dynItems.length ? `
+            <div>
+                <h3 style="margin-bottom:8px;font-size:13px">跑步动态</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${dynItems.join('')}</div>
+            </div>` : '';
 
         detail.innerHTML = `
-            <div class="card">
+            <div class="card" style="padding:18px 20px">
                 <div class="flex-between">
                     <h2>${escapeHtml(act.name)}</h2>
                     <button class="btn btn-secondary btn-sm" onclick="document.getElementById('act-detail').style.display='none'">关闭</button>
                 </div>
-                <div class="stats-grid" style="margin-top:12px">
-                    <div class="stat-card"><div class="value">${(act.distance/1000).toFixed(2)}km</div><div class="label">距离</div></div>
-                    <div class="stat-card"><div class="value">${formatDuration(act.duration)}</div><div class="label">时长</div></div>
-                    <div class="stat-card"><div class="value">${formatPace(act.avg_pace)}</div><div class="label">平均配速</div></div>
-                    <div class="stat-card"><div class="value">${Math.round(act.avg_heart_rate) || '-'}</div><div class="label">平均心率</div></div>
-                    <div class="stat-card"><div class="value">${Math.round(act.max_heart_rate) || '-'}</div><div class="label">最大心率</div></div>
-                    <div class="stat-card"><div class="value">${act.elevation_gain || 0}m</div><div class="label">海拔爬升</div></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px">
+                    <div>
+                        <h3 style="margin-bottom:8px;font-size:13px">基础指标</h3>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${basicItems.join('')}</div>
+                    </div>
+                    ${dynamicsHtml}
                 </div>
-                ${dynamicsHtml}
             </div>
         `;
         window.scrollTo({ top: detail.offsetTop - 20, behavior: 'smooth' });

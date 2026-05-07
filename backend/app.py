@@ -48,9 +48,9 @@ def _get_training_summary():
         pace_str = _format_pace_str(r['avg_pace']) if r['type'] == 'running' else '-'
         hr_str = f'{round(r["avg_heart_rate"])}bpm' if r['avg_heart_rate'] else '-'
         extras = []
-        if r.get('avg_cadence'): extras.append(f'步频{round(r["avg_cadence"])}')
-        if r.get('avg_ground_contact_time'): extras.append(f'触地{round(r["avg_ground_contact_time"])}ms')
-        if r.get('avg_vertical_oscillation'): extras.append(f'振幅{r["avg_vertical_oscillation"]/10:.1f}cm')
+        if r['avg_cadence']: extras.append(f'步频{round(r["avg_cadence"])}')
+        if r['avg_ground_contact_time']: extras.append(f'触地{round(r["avg_ground_contact_time"])}ms')
+        if r['avg_vertical_oscillation']: extras.append(f'振幅{r["avg_vertical_oscillation"]/10:.1f}cm')
         extra_str = f' [{", ".join(extras)}]' if extras else ''
         recent_str += f"  {r['start_time'][:10]} {type_cn} {r['name']}: {dist_str} @{pace_str} 心率{hr_str}{extra_str}\n"
 
@@ -70,12 +70,12 @@ def _get_health_summary():
     lines = ['\n近期健康数据:']
     for h in rows:
         parts = [h['date']]
-        if h.get('hrv_avg'): parts.append(f"HRV={round(h['hrv_avg'])}ms")
-        if h.get('sleep_score'): parts.append(f"睡眠={h['sleep_score']}分")
-        if h.get('sleep_duration'): parts.append(f"{h['sleep_duration']}h")
-        if h.get('resting_hr'): parts.append(f"静息HR={round(h['resting_hr'])}")
-        if h.get('avg_stress'): parts.append(f"压力={round(h['avg_stress'])}")
-        if h.get('body_battery_max'): parts.append(f"电量={h['body_battery_max']}/{h.get('body_battery_min','-')}")
+        if h['hrv_avg']: parts.append(f"HRV={round(h['hrv_avg'])}ms")
+        if h['sleep_score']: parts.append(f"睡眠={h['sleep_score']}分")
+        if h['sleep_duration']: parts.append(f"{h['sleep_duration']}h")
+        if h['resting_hr']: parts.append(f"静息HR={round(h['resting_hr'])}")
+        if h['avg_stress']: parts.append(f"压力={round(h['avg_stress'])}")
+        if h['body_battery_max']: parts.append(f"电量={h['body_battery_max']}/{h['body_battery_min'] or '-'}")
         lines.append('  ' + ' | '.join(parts))
     return '\n'.join(lines)
 
@@ -148,8 +148,8 @@ def create_app():
     def index():
         return send_from_directory(app.static_folder, 'index.html')
 
-    @app.route('/api/health')
-    def health():
+    @app.route('/api/ping')
+    def ping():
         return jsonify({'status': 'ok'})
 
     @app.route('/api/sync', methods=['POST'])
@@ -283,7 +283,9 @@ def create_app():
         search = request.args.get('q')
 
         db = get_db()
-        query = "SELECT * FROM activities WHERE 1=1"
+        query = """SELECT id, name, type, start_time, duration, distance,
+                          avg_heart_rate, max_heart_rate, avg_pace, elevation_gain
+                   FROM activities WHERE 1=1"""
         params = []
 
         if activity_type:

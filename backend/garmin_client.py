@@ -314,7 +314,12 @@ class GarminClient:
         try:
             rhr = self.client.get_rhr_day(date_str)
             if rhr and isinstance(rhr, dict):
-                result['resting_hr'] = rhr.get('restingHeartRate')
+                metrics_map = rhr.get('allMetrics', {}).get('metricsMap', {})
+                rhr_list = metrics_map.get('WELLNESS_RESTING_HEART_RATE')
+                if rhr_list and isinstance(rhr_list, list) and len(rhr_list) > 0:
+                    result['resting_hr'] = rhr_list[0].get('value')
+                elif rhr.get('restingHeartRate'):
+                    result['resting_hr'] = rhr.get('restingHeartRate')
                 raw_parts['rhr'] = rhr
         except Exception:
             pass
