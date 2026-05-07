@@ -1,0 +1,32 @@
+# Sensitive data - NEVER commit
+data/
+garmin_tokens/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+venv/
+.venv/
+
+# Environment variables (may contain API keys)
+.env
+.env.local
+*.env
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# PyInstaller
+*.spec.bak
