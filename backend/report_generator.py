@@ -10,7 +10,13 @@ AGENT_PROMPTS = {
 3. 数据中的模式与趋势
 4. 与标准训练模型的对比
 
-请用数据和具体数字支撑你的分析。注意：VDOT 和成绩预测已由系统基于最佳成绩精确计算并给出，请直接引用这些数值，不要重新估算。""",
+请用数据和具体数字支撑你的分析。注意：VDOT 和成绩预测已由系统基于最佳成绩精确计算并给出，请直接引用这些数值，不要重新估算。
+
+【硬规则 - 必须严格遵守】
+1. 强度分布分析必须引用系统给出的 E/M/T/I/R 配速区间，不能自行推断区间边界。
+2. 配速落在 E 区间（轻松跑）范围内的训练，必须归类为"轻松跑"，不能错误标注为马拉松配速或乳酸阈值。
+3. 同一天多条连续跑步记录（间隔很短、距离较短）通常是热身/主训练/冷身的分段记录，不是多次独立训练。遇到此类模式应标注为"分段训练"，而非"同日多次训练"。
+4. 禁止仅凭"平均训练配速快于预测马拉松配速"推断糖原消耗过多或有氧基础不足。必须结合心率数据、系统区间和分段事实进行综合判断。""",
 
     'coach': """你是实战派跑步教练，注重周期化训练、配速策略、伤病预防。
 
@@ -20,7 +26,13 @@ AGENT_PROMPTS = {
 3. 伤病风险评估与预防建议
 4. 下一阶段训练重点
 
-建议需具体、可操作，结合用户实际水平。配速区间请使用系统给出的数据。""",
+建议需具体、可操作，结合用户实际水平。配速区间请使用系统给出的数据。
+
+【硬规则 - 必须严格遵守】
+1. 强度分布必须基于系统 E/M/T/I/R 区间判断，不能自行推断。
+2. 落在 E 区间的配速就是轻松跑，不能错误归类为 M 或 T 区间。
+3. 同一天多条连续记录（间隔短、距离短）是分段训练（热身/主训练/冷身），不是多次独立训练，不得违反恢复原则进行批评。
+4. 禁止仅凭配速推断糖原消耗或有氧缺失，必须结合心率和区间数据。""",
 
     'strength': """你是力量与体能训练专家，专注于力量训练对跑步表现的转化效果。
 
@@ -38,13 +50,16 @@ AGENT_PROMPTS = {
 3. **训练建议**: 综合教练与专家的具体建议
 4. **成绩预测**: 引用系统给出的VDOT值和各距离预测成绩表格
 
-报告使用 Markdown 格式，结构清晰，便于阅读。"""
+报告使用 Markdown 格式，结构清晰，便于阅读。
+
+【硬规则 - 必须严格遵守】
+1. 强度分布必须基于系统 E/M/T/I/R 区间判断。
+2. 同一天多条连续记录是分段训练，不是多次独立训练。
+3. 禁止仅凭配速推断糖原消耗或有氧缺失。"""
 }
 
-# Jack Daniels VDOT formula.
-# The O2 cost equation gives the oxygen cost at a given velocity.
-# True VDOT is ~1.065x the O2 cost (validated against Daniels tables for VDOT 30-50).
-_VDOT_CORRECTION = 1.065
+# Daniels/Gilbert VDOT formula.
+# VDOT = oxygen demand at race velocity / sustainable fraction of VO2max.
 
 TRAINING_PACES = {
     '轻松跑 (E)': (0.72, 0.82),
@@ -54,18 +69,17 @@ TRAINING_PACES = {
     '重复跑 (R)': (1.02, 1.10),
 }
 
-# Race-specific sustainable intensity as fraction of vVO2max
-_RACE_INTENSITY = {
-    5000: 0.95,
-    10000: 0.90,
-    21097.5: 0.86,
-    42195: 0.82,
-}
-
-
 def _calc_vo2(v_m_per_min):
     """Oxygen cost (ml/kg/min) at velocity v (m/min)."""
     return -4.60 + 0.182258 * v_m_per_min + 0.000104 * v_m_per_min ** 2
+
+def _calc_vo2_fraction(time_minutes):
+    """Fraction of VO2max sustainable for a race lasting time_minutes."""
+    return (
+        0.8
+        + 0.1894393 * math.exp(-0.012778 * time_minutes)
+        + 0.2989558 * math.exp(-0.1932605 * time_minutes)
+    )
 
 def _calc_v_from_vo2(vo2):
     """Solve for velocity (m/min) given oxygen cost."""
@@ -75,27 +89,34 @@ def _calc_v_from_vo2(vo2):
         return 0
     return (-b + math.sqrt(disc)) / (2 * a)
 
-def calc_vdot(distance_m, time_seconds):
-    """Calculate VDOT from a race performance (Jack Daniels, with correction)."""
+def _calc_vdot_raw(distance_m, time_seconds):
+    """Unrounded VDOT from a race performance."""
     if time_seconds <= 0 or distance_m <= 0:
         return 0
-    v = distance_m / (time_seconds / 60.0)
-    return round(_calc_vo2(v) * _VDOT_CORRECTION, 1)
+    time_minutes = time_seconds / 60.0
+    v = distance_m / time_minutes
+    fraction = _calc_vo2_fraction(time_minutes)
+    if fraction <= 0:
+        return 0
+    return _calc_vo2(v) / fraction
+
+def calc_vdot(distance_m, time_seconds):
+    """Calculate VDOT from a race performance using the Daniels/Gilbert formula."""
+    return round(_calc_vdot_raw(distance_m, time_seconds), 1)
 
 def predict_time(vdot, distance_m):
-    """Predict race time (minutes) for a given VDOT and distance."""
-    if vdot <= 0:
+    """Predict race time (minutes) by solving the Daniels/Gilbert VDOT equation."""
+    if vdot <= 0 or distance_m <= 0:
         return None
-    v_max = _calc_v_from_vo2(vdot)
-    if v_max <= 0:
-        return None
-    # Find the intensity factor for this distance
-    intensity = 0.82  # default (marathon+)
-    for dist_key, int_val in sorted(_RACE_INTENSITY.items()):
-        if distance_m <= dist_key:
-            intensity = int_val
-            break
-    return distance_m / (v_max * intensity)
+    low, high = 1.0, 600.0
+    for _ in range(80):
+        mid = (low + high) / 2
+        candidate = _calc_vdot_raw(distance_m, mid * 60)
+        if candidate > vdot:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2
 
 def predict_time_str(vdot, distance_m):
     """Predicted time as h:mm:ss string."""
@@ -281,23 +302,50 @@ class ReportGenerator:
         if data.get('recent'):
             lines.append(f'\n近期训练概要: {data["recent"]}')
 
+        if data.get('split_context'):
+            lines.append(data['split_context'])
+
+        # Add training day merge summary
+        activities = data.get('activities', [])
+        if activities:
+            merged_summary = self._build_training_day_summary(activities)
+            if merged_summary:
+                lines.append(merged_summary)
+
         activities = data.get('activities', [])
         if activities:
             has_dynamics = any(a.get('avg_cadence') or a.get('avg_ground_contact_time') for a in activities)
-            if has_dynamics:
+            has_weather = any(a.get('temperature') is not None or a.get('weather_condition') for a in activities)
+            if has_dynamics or has_weather:
                 lines.append(f'\n## 近期训练记录明细 (共{len(activities)}条)')
-                lines.append('| 日期 | 名称 | 距离 | 配速 | 心率 | 步频 | 触地 | 振幅 |')
-                lines.append('|------|------|------|------|------|------|------|------|')
-                type_cn = {'running': '跑步', 'strength_training': '力量', 'cycling': '骑行', 'lap_swimming': '游泳'}
-                for a in activities:
-                    date = (a.get('start_time', ''))[:10]
-                    d = f'{a["distance"]/1000:.2f}km' if a.get('distance') else '-'
-                    pace = f'{a["avg_pace"]:.0f}s/km' if a.get('avg_pace') else '-'
-                    hr = f'{round(a["avg_heart_rate"])}' if a.get('avg_heart_rate') else '-'
-                    cad = f'{round(a["avg_cadence"])}' if a.get('avg_cadence') else '-'
-                    gct = f'{round(a["avg_ground_contact_time"])}ms' if a.get('avg_ground_contact_time') else '-'
-                    vo = f'{a["avg_vertical_oscillation"]/10:.1f}cm' if a.get('avg_vertical_oscillation') else '-'
-                    lines.append(f'| {date} | {a.get("name","")} | {d} | {pace} | {hr} | {cad} | {gct} | {vo} |')
+                if has_weather:
+                    lines.append('| 日期 | 名称 | 距离 | 配速 | 心率 | 步频 | 触地 | 振幅 | 温度 | 天气 |')
+                    lines.append('|------|------|------|------|------|------|------|------|------|------|')
+                    type_cn = {'running': '跑步', 'strength_training': '力量', 'cycling': '骑行', 'lap_swimming': '游泳'}
+                    for a in activities:
+                        date = (a.get('start_time', ''))[:10]
+                        d = f'{a["distance"]/1000:.2f}km' if a.get('distance') else '-'
+                        pace = f'{a["avg_pace"]:.0f}s/km' if a.get('avg_pace') else '-'
+                        hr = f'{round(a["avg_heart_rate"])}' if a.get('avg_heart_rate') else '-'
+                        cad = f'{round(a["avg_cadence"])}' if a.get('avg_cadence') else '-'
+                        gct = f'{round(a["avg_ground_contact_time"])}ms' if a.get('avg_ground_contact_time') else '-'
+                        vo = f'{a["avg_vertical_oscillation"]:.1f}cm' if a.get('avg_vertical_oscillation') else '-'
+                        temp = f'{a["temperature"]:.1f}°C' if a.get('temperature') is not None else '-'
+                        cond = a.get('weather_condition', '-') or '-'
+                        lines.append(f'| {date} | {a.get("name","")} | {d} | {pace} | {hr} | {cad} | {gct} | {vo} | {temp} | {cond} |')
+                else:
+                    lines.append('| 日期 | 名称 | 距离 | 配速 | 心率 | 步频 | 触地 | 振幅 |')
+                    lines.append('|------|------|------|------|------|------|------|------|')
+                    type_cn = {'running': '跑步', 'strength_training': '力量', 'cycling': '骑行', 'lap_swimming': '游泳'}
+                    for a in activities:
+                        date = (a.get('start_time', ''))[:10]
+                        d = f'{a["distance"]/1000:.2f}km' if a.get('distance') else '-'
+                        pace = f'{a["avg_pace"]:.0f}s/km' if a.get('avg_pace') else '-'
+                        hr = f'{round(a["avg_heart_rate"])}' if a.get('avg_heart_rate') else '-'
+                        cad = f'{round(a["avg_cadence"])}' if a.get('avg_cadence') else '-'
+                        gct = f'{round(a["avg_ground_contact_time"])}ms' if a.get('avg_ground_contact_time') else '-'
+                        vo = f'{a["avg_vertical_oscillation"]:.1f}cm' if a.get('avg_vertical_oscillation') else '-'
+                        lines.append(f'| {date} | {a.get("name","")} | {d} | {pace} | {hr} | {cad} | {gct} | {vo} |')
             else:
                 lines.append(f'\n## 近期训练记录明细 (共{len(activities)}条)')
                 lines.append('| 日期 | 类型 | 名称 | 距离 | 时长 | 配速 | 心率 |')
@@ -361,3 +409,68 @@ class ReportGenerator:
             {'role': 'system', 'content': AGENT_PROMPTS['summarizer']},
             {'role': 'user', 'content': context}
         ]
+
+    def _build_training_day_summary(self, activities):
+        """Detect same-day consecutive runs and build a merge summary.
+        
+        If multiple runs on the same day have short gaps (< 30 min) and
+        shorter distances, they are likely warmup/main/cooldown segments.
+        """
+        from datetime import datetime, timedelta
+        
+        # Group activities by date
+        day_groups = {}
+        for a in activities:
+            date = (a.get('start_time', ''))[:10]
+            if not date:
+                continue
+            if date not in day_groups:
+                day_groups[date] = []
+            day_groups[date].append(a)
+        
+        # Find days with multiple activities
+        merged_days = []
+        for date, acts in sorted(day_groups.items(), reverse=True):
+            if len(acts) < 2:
+                continue
+            
+            # Sort by start time
+            acts_sorted = sorted(acts, key=lambda x: x.get('start_time', ''))
+            
+            # Check if they look like segments (short gaps, shorter initial/final runs)
+            is_segment = True
+            for i in range(1, len(acts_sorted)):
+                try:
+                    prev_end = datetime.strptime(acts_sorted[i-1].get('start_time', '')[:19], '%Y-%m-%d %H:%M:%S')
+                    curr_start = datetime.strptime(acts_sorted[i].get('start_time', '')[:19], '%Y-%m-%d %H:%M:%S')
+                    gap = (curr_start - prev_end).total_seconds() / 60
+                    if gap > 30:  # More than 30 min gap = separate sessions
+                        is_segment = False
+                        break
+                except (ValueError, TypeError):
+                    is_segment = False
+                    break
+            
+            if is_segment and len(acts_sorted) >= 2:
+                total_dist = sum(a.get('distance', 0) or 0 for a in acts_sorted) / 1000
+                total_dur = sum(a.get('duration', 0) or 0 for a in acts_sorted) / 60
+                merged_days.append({
+                    'date': date,
+                    'count': len(acts_sorted),
+                    'total_distance': total_dist,
+                    'total_duration': total_dur,
+                    'segments': [f"{(a.get('distance', 0) or 0)/1000:.1f}km" for a in acts_sorted]
+                })
+        
+        if not merged_days:
+            return ''
+        
+        lines = ['\n## 分段训练说明（同日多次记录）']
+        lines.append('以下日期存在同日多次跑步记录，间隔较短，应为热身/主训练/冷身的分段记录：')
+        lines.append('| 日期 | 分段数 | 总距离 | 总时长 | 各段距离 |')
+        lines.append('|------|--------|--------|--------|----------|')
+        for d in merged_days[:5]:  # Show max 5 days
+            segments_str = ' → '.join(d['segments'])
+            lines.append(f"| {d['date']} | {d['count']}段 | {d['total_distance']:.1f}km | {d['total_duration']:.0f}min | {segments_str} |")
+        
+        return '\n'.join(lines)

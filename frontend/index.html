@@ -3,28 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Running AI Coach</title>
+    <title>大毛Running</title>
+    <link rel="icon" type="image/png" href="/assets/logo-damao-running.png">
     <link rel="stylesheet" href="/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://webapi.amap.com/maps?v=2.0&key=8164f133b0f7a3d682edf9e08a72bc76&plugin=AMap.HeatMap"></script>
 </head>
 <body>
     <nav id="nav">
-        <span class="nav-brand">&#127939; Running AI Coach</span>
-        <div class="nav-links">
+        <span class="nav-brand">
+            <img class="nav-logo" src="/assets/logo-damao-running.png" alt="大毛Running logo">
+            <span>大毛Running</span>
+        </span>
+        <div class="nav-tools">
+            <input id="global-search" class="top-search" type="search" placeholder="搜索活动、报告或问答">
+        </div>
+    </nav>
+    <div class="app-shell">
+        <aside class="app-sidebar">
             <a href="#dashboard">仪表盘</a>
             <a href="#activities">运动记录</a>
+            <a href="#trends">训练趋势</a>
+            <a href="#heatmap">跑步热力图</a>
             <a href="#report">训练报告</a>
             <a href="#chat">AI 问答</a>
             <a href="#settings">设置</a>
-        </div>
-    </nav>
-    <main id="app"></main>
+            <div class="sidebar-footer">
+                <div>数据源：Garmin Connect</div>
+                <div class="muted">本地训练数据工作台</div>
+            </div>
+        </aside>
+        <main id="app"></main>
+    </div>
 
     <script src="/js/api.js"></script>
     <script src="/js/app.js"></script>
     <script src="/js/dashboard.js"></script>
     <script src="/js/activities.js"></script>
+    <script src="/js/trends.js"></script>
+    <script src="/js/heatmap.js"></script>
     <script src="/js/report.js"></script>
     <script src="/js/chat.js"></script>
     <script src="/js/settings.js"></script>

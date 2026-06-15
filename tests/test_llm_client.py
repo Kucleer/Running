@@ -32,6 +32,33 @@ def test_stream_chat():
         assert chunks == ['Hello', ' world']
 
 
+def test_stream_chat_skips_empty_choices():
+    client = LLMClient(base_url='http://fake', api_key='test', model='test-model')
+    with patch('backend.llm_client.OpenAI') as mock_openai:
+        mock_instance = MagicMock()
+        mock_openai.return_value = mock_instance
+        mock_instance.chat.completions.create.return_value = [
+            MagicMock(choices=[]),
+            MagicMock(choices=[MagicMock(delta=MagicMock(content='Hello'))]),
+            MagicMock(choices=[]),
+            MagicMock(choices=[MagicMock(delta=MagicMock(content=' world'))]),
+        ]
+
+        chunks = list(client.chat_stream([{'role': 'user', 'content': 'Hi'}]))
+        assert chunks == ['Hello', ' world']
+
+
+def test_single_chat_empty_choices_returns_empty_string():
+    client = LLMClient(base_url='http://fake', api_key='test', model='test-model')
+    with patch('backend.llm_client.OpenAI') as mock_openai:
+        mock_instance = MagicMock()
+        mock_openai.return_value = mock_instance
+        mock_instance.chat.completions.create.return_value = MagicMock(choices=[])
+
+        result = client.chat([{'role': 'user', 'content': 'Hi'}])
+        assert result == ''
+
+
 def test_multi_turn_chat():
     client = LLMClient(base_url='http://fake', api_key='test', model='test-model')
     with patch('backend.llm_client.OpenAI') as mock_openai:

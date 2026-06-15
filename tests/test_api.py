@@ -64,6 +64,26 @@ def test_activities_filter_by_type(client):
     assert all(a['type'] == 'running' for a in data)
 
 
+def test_activities_running_filter_includes_running_family_and_full_day(client):
+    db = get_db()
+    db.execute("""
+        INSERT INTO activities (id, name, type, start_time, duration, distance)
+        VALUES
+        (21, 'Track Run', 'track_running', '2026-06-13 06:30:00', 1800, 5000),
+        (22, 'Treadmill Run', 'treadmill_running', '2026-06-13 20:30:00', 1800, 5000),
+        (23, 'Bike', 'cycling', '2026-06-13 09:00:00', 1800, 10000)
+    """)
+    db.commit()
+    db.close()
+
+    resp = client.get('/api/activities?type=running&from=2026-06-13&to=2026-06-13')
+    assert resp.status_code == 200
+    types = {a['type'] for a in resp.json}
+    assert 'track_running' in types
+    assert 'treadmill_running' in types
+    assert 'cycling' not in types
+
+
 def test_activity_detail(client):
     db = get_db()
     db.execute("""
@@ -85,6 +105,28 @@ def test_activity_not_found(client):
     assert resp.status_code == 404
 
 
+def test_activity_splits_endpoint(client):
+    db = get_db()
+    db.execute("""
+        INSERT INTO activities (id, name, type, start_time, duration, distance)
+        VALUES (11, 'Split Run', 'running', '2026-05-04', 720, 2000)
+    """)
+    db.execute("""
+        INSERT INTO activity_splits
+        (activity_id, split_index, source, split_type, distance, duration, avg_pace, avg_heart_rate)
+        VALUES
+        (11, 1, 'garmin', 'KM', 1000, 360, 360, 140),
+        (11, 2, 'garmin', 'KM', 1000, 355, 355, 145)
+    """)
+    db.commit()
+    db.close()
+
+    resp = client.get('/api/activities/11/splits')
+    assert resp.status_code == 200
+    assert len(resp.json) == 2
+    assert resp.json[0]['avg_pace'] == 360
+
+
 def test_stats_endpoint(client):
     db = get_db()
     db.execute("""
@@ -102,6 +144,7 @@ def test_stats_endpoint(client):
     data = resp.json
     assert 'overview' in data
     assert 'monthly' in data
+    assert round(sum(p['count'] for p in data['pace_distribution']), 1) == 22.0
 
 
 def test_report_list_empty(client):
@@ -193,4 +236,3 @@ def test_config_profile_keys(client):
     assert data['profile_gender'] == 'male'
     assert data['profile_weight'] == '65'
     assert data['profile_race_goal'] == 'half_marathon'
-

@@ -1,4 +1,4 @@
-import os
+﻿import os
 from garminconnect import Garmin
 from garminconnect.exceptions import (
     GarminConnectAuthenticationError,
@@ -100,7 +100,7 @@ class GarminClient:
     def login(self, email, password):
         for attempt, is_cn in enumerate([True, False]):
             try:
-                label = '国际区' if not is_cn else '中国区'
+                label = 'international' if not is_cn else 'cn'
                 if is_cn:
                     _patch_for_cn()
                 self.client = Garmin(email, password, is_cn=is_cn)
@@ -112,43 +112,43 @@ class GarminClient:
                 if is_cn:
                     _restore_patches()
                 if attempt == 1:
-                    return {'success': False, 'error': '请求过于频繁，请稍后重试'}
+                    return {'success': False, 'error': 'too many requests, please retry later'}
             except GarminConnectAuthenticationError as e:
                 error_msg = str(e)
                 if is_cn:
                     _restore_patches()
-                if '验证码' in error_msg or 'captcha' in error_msg.lower():
-                    return {'success': False, 'error': '需要验证码', 'need_captcha': True}
+                if 'captcha' in error_msg.lower():
+                    return {'success': False, 'error': 'captcha required', 'need_captcha': True}
                 if attempt == 1:
                     return {
                         'success': False,
-                        'error': f'佳明认证失败: {error_msg}',
-                        'detail': '请确认账号密码正确。若持续失败，可尝试登录 https://connect.garmin.cn 确认账号状态',
+                        'error': f'Garmin authentication failed: {error_msg}',
+                        'detail': 'Please confirm the account and password on Garmin Connect CN.',
                     }
             except Exception as e:
                 if is_cn:
                     _restore_patches()
                 if attempt == 1:
-                    return {'success': False, 'error': f'登录异常: {str(e)}'}
+                    return {'success': False, 'error': f'鐧诲綍寮傚父: {str(e)}'}
 
-        return {'success': False, 'error': '登录失败，请检查网络连接'}
+        return {'success': False, 'error': 'login failed, please check network'}
 
     def fetch_activities(self, start=0, limit=100):
         if not self.client:
-            raise RuntimeError("未登录")
+            raise RuntimeError("not logged in")
         raw = self.client.get_activities(start, limit)
         return [self._parse_activity(a) for a in raw]
 
     def fetch_activity_detail(self, activity_id):
         if not self.client:
-            raise RuntimeError("未登录")
+            raise RuntimeError("not logged in")
         return self.client.get_activity(activity_id)
 
     def fetch_activity_details(self, activity_id):
         """Fetch detailed activity data with running dynamics.
         Tries get_activity(summary) first, then get_activity_details(metrics)."""
         if not self.client:
-            raise RuntimeError("未登录")
+            raise RuntimeError("not logged in")
         detail = {}
         # Get summary data (contains cadence, ground contact time, etc.)
         try:
@@ -167,6 +167,61 @@ class GarminClient:
         if not detail:
             return None
         return self._parse_detail(detail)
+
+    def fetch_activity_splits(self, activity_id):
+        """Fetch Garmin-provided split/lap data for an activity."""
+        if not self.client:
+            raise RuntimeError("not logged in")
+        for method_name in ['get_activity_splits', 'get_activity_split_summaries', 'get_activity_typed_splits']:
+            method = getattr(self.client, method_name, None)
+            if not method:
+                continue
+            try:
+                raw = method(activity_id)
+                if raw:
+                    return raw
+            except Exception:
+                pass
+        return None
+
+    def fetch_activity_gpx(self, activity_id):
+        """Download activity as GPX and extract track points."""
+        if not self.client:
+            raise RuntimeError("not logged in")
+        try:
+            from garminconnect import Garmin
+            gpx_bytes = self.client.download_activity(str(activity_id), Garmin.ActivityDownloadFormat.GPX)
+            return self._parse_gpx(gpx_bytes)
+        except Exception as e:
+            print(f"GPX download error for {activity_id}: {e}")
+            return None
+
+    def _parse_gpx(self, gpx_bytes):
+        """Parse GPX XML bytes and extract track points."""
+        import xml.etree.ElementTree as ET
+        try:
+            root = ET.fromstring(gpx_bytes)
+            ns = {'gpx': 'http://www.topografix.com/GPX/1/1'}
+            points = []
+            for trk in root.findall('.//gpx:trk', ns):
+                for trkseg in trk.findall('.//gpx:trkseg', ns):
+                    for i, trkpt in enumerate(trkseg.findall('gpx:trkpt', ns)):
+                        lat = float(trkpt.get('lat'))
+                        lon = float(trkpt.get('lon'))
+                        ele_el = trkpt.find('gpx:ele', ns)
+                        time_el = trkpt.find('gpx:time', ns)
+                        point = {
+                            'lat': lat,
+                            'lng': lon,
+                            'altitude': float(ele_el.text) if ele_el is not None else None,
+                            'time': time_el.text if time_el is not None else None,
+                            'index': i,
+                        }
+                        points.append(point)
+            return points if points else None
+        except Exception as e:
+            print(f"GPX parse error: {e}")
+            return None
 
     def _parse_detail(self, detail):
         result = {}
@@ -254,10 +309,96 @@ class GarminClient:
             return None
         return duration / (distance / 1000)
 
+    def fetch_activity_weather(self, activity_id):
+        """Fetch weather data for a specific activity."""
+        if not self.client:
+            raise RuntimeError("not logged in")
+        try:
+            weather = self.client.get_activity_weather(str(activity_id))
+            if not weather:
+                return None
+            return self._parse_weather(weather)
+        except Exception:
+            return None
+
+    def _parse_weather(self, raw):
+        """Parse Garmin activity weather response. All temperatures stored in Celsius."""
+        result = {'weather_json': str(raw)}
+
+        # Garmin weather data may be nested in different structures
+        weather_data = raw
+        if isinstance(raw, list) and len(raw) > 0:
+            weather_data = raw[0]
+        elif isinstance(raw, dict):
+            weather_data = raw
+
+        # Temperature - Garmin returns Fahrenheit in 'temp', Celsius in 'tempC'
+        # Always store in Celsius
+        temp_c = None
+        # Check explicit Celsius field first
+        for key in ['tempC', 'temperatureInCelsius']:
+            val = weather_data.get(key)
+            if val is not None:
+                try:
+                    temp_c = float(val)
+                    break
+                except (ValueError, TypeError):
+                    pass
+        # If no Celsius field, check Fahrenheit fields and convert
+        if temp_c is None:
+            for key in ['temp', 'temperature', 'tempF', 'temperatureInFahrenheit', 'apparentTemp']:
+                val = weather_data.get(key)
+                if val is not None:
+                    try:
+                        temp_f = float(val)
+                        # Heuristic: if value < 60, likely already Celsius (common range)
+                        # Garmin China API may return Celsius directly in 'temp'
+                        # If > 60 or has explicit F field, convert from Fahrenheit
+                        if key in ['tempF', 'temperatureInFahrenheit']:
+                            temp_c = round((temp_f - 32) * 5 / 9, 1)
+                        elif temp_f > 60:
+                            temp_c = round((temp_f - 32) * 5 / 9, 1)
+                        else:
+                            temp_c = temp_f
+                        break
+                    except (ValueError, TypeError):
+                        pass
+        if temp_c is not None:
+            result['temperature'] = temp_c
+
+        # Humidity (percentage)
+        for key in ['humidity', 'relativeHumidity', 'weatherHumidity']:
+            val = weather_data.get(key)
+            if val is not None:
+                try:
+                    result['humidity'] = float(val)
+                    break
+                except (ValueError, TypeError):
+                    pass
+
+        # Wind speed (km/h)
+        for key in ['windSpeed', 'wind', 'weatherWindSpeed']:
+            val = weather_data.get(key)
+            if val is not None:
+                try:
+                    result['wind_speed'] = float(val)
+                    break
+                except (ValueError, TypeError):
+                    pass
+
+        # Weather condition
+        for key in ['condition', 'weatherCondition', 'weatherType', 'conditionKey']:
+            val = weather_data.get(key)
+            if val is not None:
+                result['weather_condition'] = str(val)
+                break
+
+        return result if len(result) > 1 else None
+
     def fetch_health_data(self, date_str):
         """Fetch daily health data for a given date (YYYY-MM-DD)."""
         if not self.client:
-            raise RuntimeError("未登录")
+            raise RuntimeError("not logged in")
         result = {'date': date_str}
         raw_parts = {}
 

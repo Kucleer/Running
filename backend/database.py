@@ -95,10 +95,65 @@ def init_db():
             created_at TEXT DEFAULT (datetime('now','localtime')),
             content TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS activity_splits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            activity_id INTEGER NOT NULL,
+            split_index INTEGER NOT NULL,
+            source TEXT,
+            split_type TEXT,
+            distance REAL,
+            duration REAL,
+            moving_duration REAL,
+            avg_pace REAL,
+            avg_heart_rate REAL,
+            max_heart_rate REAL,
+            avg_cadence REAL,
+            avg_power REAL,
+            elevation_gain REAL,
+            raw_json TEXT,
+            UNIQUE(activity_id, split_index, source)
+        );
+
+        CREATE TABLE IF NOT EXISTS activity_route_points (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            activity_id INTEGER NOT NULL,
+            point_index INTEGER NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            distance_m REAL,
+            elapsed_s REAL,
+            speed_mps REAL,
+            heart_rate INTEGER,
+            altitude_m REAL,
+            recorded_at TEXT,
+            city TEXT,
+            district TEXT,
+            raw_json TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS activity_route_summary (
+            activity_id INTEGER PRIMARY KEY,
+            point_count INTEGER,
+            min_lat REAL,
+            max_lat REAL,
+            min_lng REAL,
+            max_lng REAL,
+            center_lat REAL,
+            center_lng REAL,
+            city TEXT,
+            district TEXT,
+            distance_m REAL,
+            updated_at TEXT DEFAULT (datetime('now','localtime'))
+        );
     """)
     # Performance indexes
     db.execute("CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_activities_start ON activities(start_time)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_activity_splits_activity ON activity_splits(activity_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_route_points_activity ON activity_route_points(activity_id)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_route_points_city ON activity_route_points(city)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_route_summary_city ON activity_route_summary(city)")
     # Migration: add columns that may not exist on older databases
     _migrate(db, "chat_history", "session_id", "TEXT NOT NULL DEFAULT ''")
     for col, col_def in [
@@ -111,6 +166,11 @@ def init_db():
         ("vo2max", "REAL"),
         ("lactate_threshold", "REAL"),
         ("detail_json", "TEXT"),
+        ("temperature", "REAL"),
+        ("humidity", "REAL"),
+        ("wind_speed", "REAL"),
+        ("weather_condition", "TEXT"),
+        ("weather_json", "TEXT"),
     ]:
         _migrate(db, "activities", col, col_def)
     db.commit()

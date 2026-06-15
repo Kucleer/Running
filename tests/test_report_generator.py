@@ -6,22 +6,16 @@ from backend.report_generator import (
 
 
 def test_vdot_calculation():
-    # 5K in 27:00 → VDOT ~33 (user confirmed ~33.2)
-    vdot = calc_vdot(5000, 27 * 60)
-    assert 32.0 <= vdot <= 35.0
-
-    # 5K in 24:30 → VDOT ~37
-    vdot = calc_vdot(5000, 24.5 * 60)
-    assert 35.0 <= vdot <= 40.0
-
-    # 5K in 20:00 → VDOT ~48
-    vdot = calc_vdot(5000, 20 * 60)
-    assert 46 <= vdot <= 51
+    # Daniels/Gilbert reference cases.
+    assert calc_vdot(5000, 27 * 60) == pytest.approx(35.0, abs=0.1)
+    assert calc_vdot(10000, 59 * 60 + 35) == pytest.approx(32.5, abs=0.1)
+    assert calc_vdot(5000, 20 * 60) == pytest.approx(49.8, abs=0.1)
+    assert calc_vdot(21097.5, 2 * 3600 + 11 * 60 + 34) == pytest.approx(32.7, abs=0.1)
 
 
 def test_vdot_race_prediction():
     vdot = calc_vdot(5000, 27 * 60)
-    assert 32.0 <= vdot <= 35.0
+    assert vdot == pytest.approx(35.0, abs=0.1)
 
     # Higher VDOT → faster 10K
     t_low = predict_time(33.0, 10000)
@@ -36,6 +30,8 @@ def test_vdot_race_prediction():
     pace_5k = t_5k * 60 / 5
     pace_10k = t_10k * 60 / 10
     assert pace_10k > pace_5k, f"10K pace ({pace_10k:.0f}s/km) should be slower than 5K ({pace_5k:.0f}s/km)"
+    assert calc_vdot(5000, t_5k * 60) == pytest.approx(33.0, abs=0.1)
+    assert calc_vdot(10000, t_10k * 60) == pytest.approx(33.0, abs=0.1)
 
     # Marathon > 3 hours for VDOT ~33
     ts = predict_time_str(33.0, 42195)

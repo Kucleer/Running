@@ -15,6 +15,7 @@ def test_init_db_creates_tables(test_db_path):
     assert 'chat_history' in table_names
     assert 'config' in table_names
     assert 'reports' in table_names
+    assert 'activity_splits' in table_names
 
 
 def test_init_db_idempotent(test_db_path):

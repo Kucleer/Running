@@ -22,10 +22,17 @@ const API = {
         return this.get('/api/activities' + (qs ? '?' + qs : ''));
     },
     activityDetail(id) { return this.get('/api/activity/' + id); },
+    activitySplits(id) { return this.get('/api/activities/' + id + '/splits'); },
 
-    sync(email, password) { return this.post('/api/sync', { email, password }); },
-    backfillDetails(limit = 50) { return this.post('/api/sync/backfill', { limit }); },
-    healthData(days = 14) { return this.get('/api/health?days=' + days); },
+    sync(email, password, syncHealth = true, healthDays = 14) { return this.post('/api/sync', { email, password, sync_health: syncHealth, health_days: healthDays }); },
+    backfillDetails(limit = 0) { return this.post('/api/sync/backfill', limit ? { limit } : { all: true }); },
+    backfillWeather(limit = 50) { return this.post('/api/sync/backfill_weather', { limit }); },
+    healthData(days = 14, from = null, to = null) {
+        if (from && to) {
+            return this.get(`/api/health?from=${from}&to=${to}`);
+        }
+        return this.get('/api/health?days=' + days);
+    },
     healthSync(days = 7) { return this.post('/api/health/sync', { days }); },
 
     stats(period = 'monthly', dateFrom = null, dateTo = null) {
@@ -43,11 +50,11 @@ const API = {
     getReport(id) { return this.get('/api/report/' + id); },
     deleteReport(id) { return this.delete('/api/report/' + id); },
 
-    async chatAsk(question, sessionId, onChunk) {
+    async chatAsk(question, sessionId, onChunk, includeStrength = false) {
         const resp = await fetch('/api/chat/ask', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question, session_id: sessionId })
+            body: JSON.stringify({ question, session_id: sessionId, include_strength: includeStrength })
         });
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
@@ -60,8 +67,12 @@ const API = {
                 if (line.startsWith('data: ')) {
                     const data = line.slice(6);
                     if (data === '[DONE]') return;
-                    try { onChunk(JSON.parse(data)); }
-                    catch { onChunk(data); }
+                    let parsed = data;
+                    try {
+                        parsed = JSON.parse(data);
+                    } catch {
+                    }
+                    onChunk(parsed);
                 }
             }
         }

@@ -27,6 +27,11 @@ def test_sync_new_activities(mock_garmin_class, sync_service):
         }
     ]
     mock_client.fetch_activity_details.return_value = None
+    mock_client.fetch_activity_splits.return_value = [
+        {'distance': 1000.0, 'duration': 360.0, 'averageHR': 140.0, 'splitType': 'KM'},
+        {'distance': 1000.0, 'duration': 350.0, 'averageHR': 145.0, 'splitType': 'KM'},
+    ]
+    mock_client.fetch_activity_weather.return_value = None
 
     result = sync_service.sync(email='test@test.com', password='pw')
 
@@ -35,9 +40,12 @@ def test_sync_new_activities(mock_garmin_class, sync_service):
 
     db = get_db()
     row = db.execute("SELECT * FROM activities WHERE id=1").fetchone()
+    splits = db.execute("SELECT * FROM activity_splits WHERE activity_id=1 ORDER BY split_index").fetchall()
     db.close()
     assert row is not None
     assert row['name'] == 'Run 1'
+    assert len(splits) == 2
+    assert splits[0]['avg_pace'] == 360.0
 
 
 def test_sync_skips_existing(sync_service):
@@ -59,6 +67,7 @@ def test_sync_skips_existing(sync_service):
              'avg_heart_rate': None, 'max_heart_rate': None,
              'avg_pace': None, 'elevation_gain': 0, 'raw_json': '{}'}
         ]
+        mock_client.fetch_activity_weather.return_value = None
 
         result = sync_service.sync(email='test@test.com', password='pw')
         assert result['new_count'] == 0

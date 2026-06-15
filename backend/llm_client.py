@@ -52,7 +52,9 @@ class LLMClient:
         for attempt in range(self.max_retries + 1):
             try:
                 resp = self._chat_impl(messages, max_tokens, temperature, False)
-                return resp.choices[0].message.content
+                if not getattr(resp, 'choices', None):
+                    return ''
+                return resp.choices[0].message.content or ''
             except (APIStatusError, APITimeoutError, APIConnectionError) as e:
                 last_err = e
                 if not self._is_retryable(e) or attempt >= self.max_retries:
@@ -68,7 +70,11 @@ class LLMClient:
             try:
                 resp = self._chat_impl(messages, max_tokens, temperature, True)
                 for chunk in resp:
-                    content = chunk.choices[0].delta.content
+                    choices = getattr(chunk, 'choices', None)
+                    if not choices:
+                        continue
+                    delta = getattr(choices[0], 'delta', None)
+                    content = getattr(delta, 'content', None)
                     if content:
                         yield content
                 return

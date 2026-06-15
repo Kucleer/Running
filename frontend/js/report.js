@@ -1,32 +1,87 @@
 registerPage('#report', (container) => {
+    const today = new Date().toISOString().split('T')[0];
+    const firstDayOfMonth = today.substring(0, 8) + '01';
+    
     container.innerHTML = `
-        <h1 style="margin-bottom:16px">AI 训练报告</h1>
-        <div class="card">
-            <div class="flex-between">
-                <h2>生成新报告</h2>
-                <button class="btn" id="gen-report-btn" onclick="startReportGeneration()">开始生成</button>
+        <div class="page-header">
+            <div>
+                <div class="page-kicker">Report</div>
+                <h1>训练报告</h1>
             </div>
-            <div style="margin-top:12px;display:flex;gap:12px">
-                <div><label>开始日期</label><input id="report-date-from" type="date"></div>
-                <div><label>结束日期</label><input id="report-date-to" type="date"></div>
+        </div>
+        <div class="report-filter">
+            <input id="report-date-from" type="date" value="${firstDayOfMonth}">
+            <span class="report-sep">-</span>
+            <input id="report-date-to" type="date" value="${today}">
+            <div class="report-quick-group">
+                <button class="btn btn-secondary report-quick" data-range="week">近一周</button>
+                <button class="btn btn-secondary report-quick" data-range="month">当月</button>
+                <button class="btn btn-secondary report-quick" data-range="3month">近三个月</button>
+                <button class="btn btn-secondary report-quick" data-range="halfYear">近半年</button>
+                <button class="btn btn-secondary report-quick" data-range="year">当年</button>
             </div>
-            <div id="report-progress" style="margin-top:12px;display:none">
-                <div class="progress-bar"><div id="report-progress-fill" class="fill" style="width:0"></div></div>
-                <p id="report-status-text" style="font-size:13px;color:#888;margin-top:4px"></p>
+            <button class="btn" id="gen-report-btn" onclick="startReportGeneration()">开始生成</button>
+        </div>
+        <div class="dashboard-top-grid">
+            <div class="card">
+                <div class="section-title">
+                    <h2>生成新报告</h2>
+                </div>
+                <div id="report-progress" style="margin-top:12px;display:none">
+                    <div class="progress-bar"><div id="report-progress-fill" class="fill" style="width:0"></div></div>
+                    <p id="report-status-text" class="muted small" style="margin-top:6px"></p>
+                </div>
+                <div class="empty-state" id="report-empty-tip">选择时间范围后生成训练报告。</div>
+            </div>
+            <div class="card">
+                <div class="section-title"><h2>历史报告</h2></div>
+                <div id="report-history"><div class="empty-state">加载中...</div></div>
             </div>
         </div>
         <div id="report-result" class="card" style="display:none">
-            <div class="flex-between">
-                <h2>训练报告</h2>
+            <div class="section-title">
+                <h2>报告预览</h2>
                 <button class="btn btn-secondary" onclick="printReport()">打印 / 保存 PDF</button>
             </div>
             <div id="report-content" class="report-md"></div>
         </div>
-        <div class="card" style="margin-top:16px">
-            <h2>历史报告</h2>
-            <div id="report-history"><p style="color:var(--text-muted)">加载中...</p></div>
-        </div>
     `;
+
+    // Quick filter buttons
+    document.querySelectorAll('.report-quick').forEach(btn => {
+        btn.onclick = () => {
+            const range = btn.dataset.range;
+            const today = new Date();
+            let from;
+            
+            switch (range) {
+                case 'week':
+                    const weekAgo = new Date(today);
+                    weekAgo.setDate(weekAgo.getDate() - 7);
+                    from = weekAgo.toISOString().split('T')[0];
+                    break;
+                case 'month':
+                    from = today.toISOString().substring(0, 8) + '01';
+                    break;
+                case '3month':
+                    const threeMonthsAgo = new Date(today);
+                    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+                    from = threeMonthsAgo.toISOString().split('T')[0];
+                    break;
+                case 'halfYear':
+                    const halfYearAgo = new Date(today);
+                    halfYearAgo.setMonth(halfYearAgo.getMonth() - 6);
+                    from = halfYearAgo.toISOString().split('T')[0];
+                    break;
+                case 'year':
+                    from = today.getFullYear() + '-01-01';
+                    break;
+            }
+            
+            document.getElementById('report-date-from').value = from;
+            document.getElementById('report-date-to').value = today.toISOString().split('T')[0];
+        };
+    });
 
     loadReportHistory();
 });
@@ -36,20 +91,20 @@ async function loadReportHistory() {
         const reports = await API.listReports();
         const container = document.getElementById('report-history');
         if (!reports.length) {
-            container.innerHTML = '<p style="color:var(--text-muted)">暂无历史报告</p>';
+            container.innerHTML = '<div class="empty-state">暂无历史报告</div>';
             return;
         }
         container.innerHTML = reports.map(r => `
             <div class="report-history-item">
                 <div>
-                    <strong style="cursor:pointer;color:var(--primary)" onclick="viewReport(${r.id})">${escHtml(r.title)}</strong>
-                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${r.date_from} ~ ${r.date_to} | ${r.created_at}</div>
+                    <div class="report-link" onclick="viewReport(${r.id})">${escHtml(r.title)}</div>
+                    <div class="muted small">${r.date_from} ~ ${r.date_to} / ${r.created_at}</div>
                 </div>
                 <button class="btn btn-secondary btn-sm" onclick="deleteReport(${r.id})">删除</button>
             </div>
         `).join('');
     } catch (err) {
-        document.getElementById('report-history').innerHTML = `<p style="color:red">加载失败: ${err.message}</p>`;
+        document.getElementById('report-history').innerHTML = `<div class="empty-state error-text">加载失败：${err.message}</div>`;
     }
 }
 
@@ -58,9 +113,9 @@ async function viewReport(reportId) {
         const report = await API.getReport(reportId);
         document.getElementById('report-result').style.display = 'block';
         document.getElementById('report-content').innerHTML = marked.parse(report.content);
-        window.scrollTo({ top: document.getElementById('report-result').offsetTop - 20, behavior: 'smooth' });
+        window.scrollTo({ top: document.getElementById('report-result').offsetTop - 76, behavior: 'smooth' });
     } catch (err) {
-        showToast('加载报告失败: ' + err.message, 'error');
+        showToast('加载报告失败：' + err.message, 'error');
     }
 }
 
@@ -70,13 +125,13 @@ async function deleteReport(reportId) {
         await API.deleteReport(reportId);
         loadReportHistory();
     } catch (err) {
-        showToast('删除失败: ' + err.message, 'error');
+        showToast('删除失败：' + err.message, 'error');
     }
 }
 
 function escHtml(s) {
     const d = document.createElement('div');
-    d.textContent = s;
+    d.textContent = s || '';
     return d.innerHTML;
 }
 
@@ -88,8 +143,10 @@ async function startReportGeneration() {
     const progressDiv = document.getElementById('report-progress');
     const progressFill = document.getElementById('report-progress-fill');
     const statusText = document.getElementById('report-status-text');
+    const emptyTip = document.getElementById('report-empty-tip');
     progressDiv.style.display = 'block';
-
+    if (emptyTip) emptyTip.style.display = 'none';
+    statusText.style.color = '';
     document.getElementById('report-result').style.display = 'none';
 
     try {
@@ -100,7 +157,6 @@ async function startReportGeneration() {
         if (dateTo) body.to = dateTo;
 
         const { task_id } = await API.generateReport(body);
-
         let width = 0;
         const pollInterval = setInterval(async () => {
             try {
@@ -116,22 +172,25 @@ async function startReportGeneration() {
                         const result = await API.reportResult(task_id);
                         document.getElementById('report-result').style.display = 'block';
                         document.getElementById('report-content').innerHTML = marked.parse(result.report);
+                        loadReportHistory();
                     } else {
                         statusText.textContent = '报告生成失败';
-                        statusText.style.color = 'red';
+                        statusText.style.color = '#d92d20';
                     }
                     btn.disabled = false;
                     btn.textContent = '开始生成';
                 }
             } catch (e) {
                 clearInterval(pollInterval);
-                statusText.textContent = '获取状态失败: ' + e.message;
+                statusText.textContent = '获取状态失败：' + e.message;
+                statusText.style.color = '#d92d20';
                 btn.disabled = false;
                 btn.textContent = '开始生成';
             }
         }, 2000);
     } catch (err) {
-        statusText.textContent = '启动失败: ' + err.message;
+        statusText.textContent = '启动失败：' + err.message;
+        statusText.style.color = '#d92d20';
         btn.disabled = false;
         btn.textContent = '开始生成';
     }

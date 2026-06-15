@@ -33,6 +33,37 @@ class ChatService:
 
     def get_sessions(self):
         db = get_db()
+        db.execute(
+            """
+            INSERT OR IGNORE INTO chat_sessions (id, title)
+            SELECT session_id, '新对话'
+            FROM chat_history
+            WHERE session_id <> ''
+            GROUP BY session_id
+            """
+        )
+        db.execute(
+            """
+            UPDATE chat_sessions
+            SET title = (
+                SELECT substr(content, 1, 40) ||
+                       CASE WHEN length(content) > 40 THEN '...' ELSE '' END
+                FROM chat_history
+                WHERE chat_history.session_id = chat_sessions.id
+                  AND chat_history.role = 'user'
+                ORDER BY timestamp ASC, id ASC
+                LIMIT 1
+            )
+            WHERE (title IS NULL OR title = '' OR title = '新对话')
+              AND EXISTS (
+                SELECT 1
+                FROM chat_history
+                WHERE chat_history.session_id = chat_sessions.id
+                  AND chat_history.role = 'user'
+              )
+            """
+        )
+        db.commit()
         rows = db.execute(
             "SELECT s.*, (SELECT COUNT(*) FROM chat_history WHERE session_id=s.id) as msg_count "
             "FROM chat_sessions s ORDER BY s.created_at DESC"
@@ -65,7 +96,12 @@ class ChatService:
 
     def save_message(self, session_id, role, content, context_snapshot=''):
         db = get_db()
-        db.execute(
+        if session_id:
+            db.execute(
+                "INSERT OR IGNORE INTO chat_sessions (id, title) VALUES (?, ?)",
+                (session_id, '新对话')
+            )
+        cur = db.execute(
             "INSERT INTO chat_history (session_id, role, content, context_snapshot) VALUES (?, ?, ?, ?)",
             (session_id, role, content, context_snapshot)
         )
@@ -76,6 +112,17 @@ class ChatService:
                 "UPDATE chat_sessions SET title=? WHERE id=? AND title='新对话'",
                 (title, session_id)
             )
+        db.commit()
+        msg_id = cur.lastrowid
+        db.close()
+        return msg_id
+
+    def update_message(self, msg_id, content):
+        db = get_db()
+        db.execute(
+            "UPDATE chat_history SET content=? WHERE id=?",
+            (content, msg_id)
+        )
         db.commit()
         db.close()
 

@@ -87,3 +87,18 @@ def test_fetch_activities(mock_garmin_class):
     assert activities[0]['id'] == 123
     assert activities[0]['type'] == 'running'
     assert activities[0]['distance'] == 5000.0
+
+
+@patch('backend.garmin_client.Garmin')
+def test_fetch_activity_splits(mock_garmin_class):
+    mock_garmin = MagicMock()
+    mock_garmin.get_activity_splits.return_value = [
+        {'distance': 1000.0, 'duration': 360.0}
+    ]
+
+    client = GarminClient()
+    client.client = mock_garmin
+    splits = client.fetch_activity_splits(123)
+
+    assert len(splits) == 1
+    assert splits[0]['distance'] == 1000.0
