@@ -57,6 +57,10 @@ def test_data_context_includes_vdot():
         'performances': {'vdot': 33.2, 'source': 'Test 5K (5.0km, 27.0min)', 'best_5k': 'Test Run'},
         'profile': {'age': '28', 'gender': 'male', 'weight': '65', 'resting_hr': '55', 'max_hr': '190'},
         'recent': '2026-05-01 Run: 5.0km @330s/km',
+        'pace_distribution': [
+            {'pace_range': '轻松跑 E 6:29-7:23', 'count': 12.5},
+            {'pace_range': '马拉松配速 M 5:54-6:29', 'count': 2.5},
+        ],
         'activities': [
             {'name': 'Morning Run', 'type': 'running', 'distance': 5000, 'duration': 1650,
              'avg_pace': 330, 'avg_heart_rate': 145, 'max_heart_rate': 170,
@@ -78,6 +82,9 @@ def test_data_context_includes_vdot():
     assert 'Strength Workout' in ctx
     assert '5.00km' in ctx
     assert '近期训练记录明细' in ctx
+    assert '系统配速分布（与仪表盘一致' in ctx
+    assert '轻松跑 E 6:29-7:23' in ctx
+    assert '83%' in ctx
     # Verify pace table output format
     assert '/km' in ctx
     assert '~' in ctx
@@ -91,8 +98,10 @@ def test_report_generation_flow(mock_llm_class):
         '数据分析师首轮分析...',
         '分析师回复...',
         '教练回复...',
+        '体能训练师分析...',
         '分析师回复2...',
         '教练回复2...',
+        '体能训练师分析2...',
         '主教练整合报告...',
     ]
 
@@ -113,7 +122,7 @@ def test_report_generation_flow(mock_llm_class):
     report = generator.generate(training_data)
     assert report is not None
     assert '主教练整合报告' in report
-    assert mock_llm.chat.call_count >= 5
+    assert mock_llm.chat.call_count >= 7
 
 
 @patch('backend.report_generator.LLMClient')
@@ -121,14 +130,16 @@ def test_report_with_strength_data(mock_llm_class):
     mock_llm = MagicMock()
     mock_llm_class.return_value = mock_llm
     mock_llm.chat.side_effect = [
-        'analyst', 'coach', 'strength', 'analyst', 'coach', 'strength',
-        'analyst', 'coach', 'strength', 'summarizer'
+        'analyst',
+        'analyst', 'coach', 'fitness', 'strength',
+        'analyst', 'coach', 'fitness', 'strength',
+        'summarizer'
     ]
 
     generator = ReportGenerator('url', 'key', 'model', rounds=3)
     generator.generate({'total_runs': 10, 'has_strength': True})
 
-    assert mock_llm.chat.call_count >= 6
+    assert mock_llm.chat.call_count >= 9
 
 
 def test_report_generator_handles_llm_error():

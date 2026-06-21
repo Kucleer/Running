@@ -15,8 +15,9 @@ AGENT_PROMPTS = {
 【硬规则 - 必须严格遵守】
 1. 强度分布分析必须引用系统给出的 E/M/T/I/R 配速区间，不能自行推断区间边界。
 2. 配速落在 E 区间（轻松跑）范围内的训练，必须归类为"轻松跑"，不能错误标注为马拉松配速或乳酸阈值。
-3. 同一天多条连续跑步记录（间隔很短、距离较短）通常是热身/主训练/冷身的分段记录，不是多次独立训练。遇到此类模式应标注为"分段训练"，而非"同日多次训练"。
-4. 禁止仅凭"平均训练配速快于预测马拉松配速"推断糖原消耗过多或有氧基础不足。必须结合心率数据、系统区间和分段事实进行综合判断。""",
+3. 强度/配速分布必须直接引用"系统配速分布（与仪表盘一致）"表，不能根据训练明细自行重新统计百分比或区间。
+4. 同一天多条连续跑步记录（间隔很短、距离较短）通常是热身/主训练/冷身的分段记录，不是多次独立训练。遇到此类模式应标注为"分段训练"，而非"同日多次训练"。
+5. 禁止仅凭"平均训练配速快于预测马拉松配速"推断糖原消耗过多或有氧基础不足。必须结合心率数据、系统区间和分段事实进行综合判断。""",
 
     'coach': """你是实战派跑步教练，注重周期化训练、配速策略、伤病预防。
 
@@ -31,8 +32,9 @@ AGENT_PROMPTS = {
 【硬规则 - 必须严格遵守】
 1. 强度分布必须基于系统 E/M/T/I/R 区间判断，不能自行推断。
 2. 落在 E 区间的配速就是轻松跑，不能错误归类为 M 或 T 区间。
-3. 同一天多条连续记录（间隔短、距离短）是分段训练（热身/主训练/冷身），不是多次独立训练，不得违反恢复原则进行批评。
-4. 禁止仅凭配速推断糖原消耗或有氧缺失，必须结合心率和区间数据。""",
+3. 强度/配速分布必须直接引用"系统配速分布（与仪表盘一致）"表，不能自行重新计算占比。
+4. 同一天多条连续记录（间隔短、距离短）是分段训练（热身/主训练/冷身），不是多次独立训练，不得违反恢复原则进行批评。
+5. 禁止仅凭配速推断糖原消耗或有氧缺失，必须结合心率和区间数据。""",
 
     'strength': """你是力量与体能训练专家，专注于力量训练对跑步表现的转化效果。
 
@@ -42,20 +44,34 @@ AGENT_PROMPTS = {
 3. 力量训练的周期化建议
 4. 需要加强的肌群与动作建议""",
 
+    'fitness': """你是体能恢复与身体状态专家，专注于从生理指标角度评估跑者的恢复状态和训练适应性。
+
+基于提供的健康数据（HRV、静息心率、睡眠、压力、身体电量等），分析:
+1. 恢复状态评估：HRV趋势、静息心率变化、睡眠质量对恢复的影响
+2. 训练负荷适应性：当前训练强度是否与身体恢复能力匹配
+3. 过度训练风险：是否存在过度训练的早期信号（HRV持续下降、静息心率升高、睡眠质量下降）
+4. 恢复策略建议：基于身体状态给出具体的恢复建议（休息、轻度训练、营养补充等）
+
+分析必须基于具体数据，引用HRV、静息心率、睡眠分数等具体数值。
+如果健康数据缺失或不足，请明确说明数据限制，不要进行无依据的推测。""",
+
     'summarizer': """你是主教练，负责整合各方专家意见，形成最终的训练报告。
 
-报告需包含以下四部分:
+报告需包含以下五部分:
 1. **训练数据统计分析**: 基于数据分析师的观点总结
 2. **跑步能力趋势**: 能力变化趋势与评估（使用系统给出的VDOT和成绩预测数据，直接引用，不要重新计算）
-3. **训练建议**: 综合教练与专家的具体建议
-4. **成绩预测**: 引用系统给出的VDOT值和各距离预测成绩表格
+3. **身体状态与恢复**: 基于体能训练师的分析，评估恢复状态和训练适应性
+4. **训练建议**: 综合教练与专家的具体建议
+5. **成绩预测**: 引用系统给出的VDOT值和各距离预测成绩表格
 
 报告使用 Markdown 格式，结构清晰，便于阅读。
 
 【硬规则 - 必须严格遵守】
 1. 强度分布必须基于系统 E/M/T/I/R 区间判断。
-2. 同一天多条连续记录是分段训练，不是多次独立训练。
-3. 禁止仅凭配速推断糖原消耗或有氧缺失。"""
+2. 强度/配速分布必须直接引用"系统配速分布（与仪表盘一致）"表，不能自行重新统计。
+3. 同一天多条连续记录是分段训练，不是多次独立训练。
+4. 禁止仅凭配速推断糖原消耗或有氧缺失。
+5. 身体状态分析必须基于实际健康数据，不能凭空推测。"""
 }
 
 # Daniels/Gilbert VDOT formula.
@@ -173,6 +189,11 @@ class ReportGenerator:
             )
             conversation.append({'agent': 'coach', 'content': coach_reply})
 
+            fitness_reply = self.llm.chat(
+                self._build_cross_talk_prompt('fitness', conversation)
+            )
+            conversation.append({'agent': 'fitness', 'content': fitness_reply})
+
             if has_strength:
                 strength_reply = self.llm.chat(
                     self._build_cross_talk_prompt('strength', conversation)
@@ -204,6 +225,11 @@ class ReportGenerator:
             yield {'status': 'running', 'round': r, 'agent': 'coach', 'phase': f'第{r}轮讨论 - 跑步教练...'}
             conversation.append({'agent': 'coach', 'content': self.llm.chat(
                 self._build_cross_talk_prompt('coach', conversation)
+            )})
+
+            yield {'status': 'running', 'round': r, 'agent': 'fitness', 'phase': f'第{r}轮讨论 - 体能训练师...'}
+            conversation.append({'agent': 'fitness', 'content': self.llm.chat(
+                self._build_cross_talk_prompt('fitness', conversation)
             )})
 
             if has_strength:
@@ -277,6 +303,17 @@ class ReportGenerator:
 
             if performances.get('best_5k'):
                 lines.append(f'\n最近最佳 5K: {performances["best_5k"]}')
+
+        pace_distribution = data.get('pace_distribution') or []
+        if pace_distribution:
+            total_pace_km = sum(float(p.get('count') or 0) for p in pace_distribution)
+            lines.append('\n## 系统配速分布（与仪表盘一致，请直接引用）')
+            lines.append('| 配速区间 | 距离 | 占比 |')
+            lines.append('|---------|------|------|')
+            for item in pace_distribution:
+                km = float(item.get('count') or 0)
+                pct = round(km / total_pace_km * 100) if total_pace_km > 0 else 0
+                lines.append(f'| {item.get("pace_range", "-")} | {km:.1f} km | {pct}% |')
 
         # HR zones from profile
         profile = data.get('profile', {})

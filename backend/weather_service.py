@@ -4,8 +4,9 @@ from datetime import datetime, timedelta
 
 import requests
 
-# Major Chinese cities with coordinates
+# Major cities with coordinates (China + UAE + International)
 CITY_COORDS = {
+    # China
     '上海市': {'lat': 31.23, 'lng': 121.47},
     '北京市': {'lat': 39.90, 'lng': 116.40},
     '广州市': {'lat': 23.13, 'lng': 113.26},
@@ -35,6 +36,26 @@ CITY_COORDS = {
     '哈尔滨市': {'lat': 45.75, 'lng': 126.65},
     '沈阳市': {'lat': 41.80, 'lng': 123.43},
     '长春市': {'lat': 43.88, 'lng': 125.32},
+    # UAE
+    '迪拜': {'lat': 25.20, 'lng': 55.27},
+    '阿布扎比': {'lat': 24.45, 'lng': 54.65},
+    '沙迦': {'lat': 25.35, 'lng': 55.40},
+    '阿治曼': {'lat': 25.41, 'lng': 55.44},
+    '哈伊马角': {'lat': 25.79, 'lng': 55.94},
+    '富查伊拉': {'lat': 25.12, 'lng': 56.33},
+    '乌姆盖万': {'lat': 25.56, 'lng': 55.55},
+    # International
+    '东京': {'lat': 35.68, 'lng': 139.69},
+    '首尔': {'lat': 37.57, 'lng': 126.98},
+    '新加坡': {'lat': 1.35, 'lng': 103.82},
+    '曼谷': {'lat': 13.76, 'lng': 100.50},
+    '悉尼': {'lat': -33.87, 'lng': 151.21},
+    '墨尔本': {'lat': -37.81, 'lng': 144.96},
+    '伦敦': {'lat': 51.51, 'lng': -0.13},
+    '巴黎': {'lat': 48.86, 'lng': 2.35},
+    '纽约': {'lat': 40.71, 'lng': -74.01},
+    '洛杉矶': {'lat': 34.05, 'lng': -118.24},
+    '旧金山': {'lat': 37.77, 'lng': -122.42},
 }
 
 
